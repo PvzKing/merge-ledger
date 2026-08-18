@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mergeledger"
+version = "0.2.0"
+description = "Ukur apa yang terjadi pada kode setelah di-merge: churn, duplikasi, konsolidasi, dan antrian review."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+mergeledger = "mergeledger.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mergeledger*"]

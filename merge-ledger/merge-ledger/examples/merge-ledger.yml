@@ -1,0 +1,84 @@
+# Jalankan pemindaian tiap Senin pagi dan pada tiap PR.
+# Minggu-minggu pertama sebaiknya tanpa ambang: kumpulkan angka dasar dulu.
+
+name: merge-ledger
+
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # wajib: blame butuh riwayat penuh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pasang
+        run: pip install -e .
+
+      - name: Pindai
+        env:
+          # Token bawaan Actions sudah cukup untuk membaca PR repo ini.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mergeledger . \
+            --days 90 \
+            --out merge-ledger.html \
+            --json merge-ledger.json \
+            --quiet
+          # Tambahkan ambang setelah punya angka dasar, mis:
+          #   --max-churn 15 --max-duplication 20 --max-stale-prs 10
+
+      - name: Ringkasan
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("merge-ledger.json"))
+          m, v = d["metrics"], d["verdicts"]
+          print(f"## Merge Ledger — {d['repo']}\n")
+          print("| Ukuran | Nilai | Vonis |")
+          print("|---|---:|---|")
+          print(f"| Ditulis ulang | {m['churn_rate']}% | {v['churn']} |")
+          print(f"| Salin vs pindah | {m['copy_vs_move']}x | — |")
+          print(f"| Kode kembar | {m['head_duplication_rate']}% | {v['duplication']} |")
+          print(f"| Penyamaran error | {m['masking_per_kloc']}/kloc | {v['masking']} |")
+          f = d.get("review_flow") or {}
+          if f.get("available"):
+              print(f"| Antri review | {f['open_count']} PR | {f['stale_count']} basi |")
+          t = d.get("trend")
+          if t:
+              naik = [c for c in t["changes"] if c["significant"] and c["meaning"] == "memburuk"]
+              if naik:
+                  print(f"\n**Memburuk dalam {t['span_days']:.0f} hari:** " + ", ".join(
+                      f"{c['key']} {c['pct_change']:+.0f}%" for c in naik[:4]))
+              else:
+                  print(f"\n_Tidak ada yang memburuk dalam {t['span_days']:.0f} hari._")
+          worst = sorted(d["areas"], key=lambda a: -a["score"])[:3]
+          if worst:
+              print("\n**Area teratas:** " + ", ".join(
+                  f"`{a['name']}` ({a['score']})" for a in worst))
+          PY
+
+      - name: Simpan riwayat
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.name "merge-ledger"
+          git config user.email "merge-ledger@users.noreply.github.com"
+          git add .merge-ledger/history.json
+          git diff --staged --quiet || git commit -m "chore: catat pemindaian merge-ledger"
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merge-ledger
+          path: |
+            merge-ledger.html
+            merge-ledger.json
