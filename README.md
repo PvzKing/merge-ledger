@@ -35,7 +35,7 @@ No service, no account, no telemetry. Just `git` and Python 3.10+.
 ## Install
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/merge-ledger.git
+git clone https://github.com/PvzKing/merge-ledger.git
 cd merge-ledger
 pip install -e .
 ```
